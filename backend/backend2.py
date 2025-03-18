@@ -167,11 +167,9 @@ def get_news():
         contents=input1,
     )
     response_text = str(response.text)
-    print(response)
     response_ans = []
     response_ans = response_text.replace("<","").replace(">","").split("@")
     response_ans[:] = [item for item in response_ans if item]
-    print(response_ans)
     try:
         # Example news data - replace with actual API calls
         news = []
