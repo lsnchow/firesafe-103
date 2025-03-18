@@ -8,22 +8,33 @@ CORS(app)
 @app.route('/get-data', methods=['GET'])
 def get_data():
     try:
-        # Get table_id from URL parameters
-        table_id = request.args.get('table_id', 'id_table')
-        print(f"Requesting data for table: {table_id}")
-        
-        # Make request to the PHP API
-        headers = {'Content-Type': 'application/json'}
+        # First get the available UIDs
+        headers_input = {'Content-Type': 'application/json'}
         response = requests.get(
             'http://184.144.75.214/api/api.php',
-            json={'table_id': table_id},
-            headers=headers
+            json={'table_id': 'id_table'},
+            headers=headers_input
+        )
+        
+        uids = response.json()
+        print("Available UIDs:", uids)
+        
+        # Get the requested UID from parameters or default to UID_1
+        requested_uid = request.args.get('uid', 'UID_1')
+        print(f"Requesting data for UID: {requested_uid}")
+        
+        if requested_uid not in uids:
+            return jsonify({'error': f"UID {requested_uid} not found. Available UIDs: {uids}"}), 404
+        
+        # Now make the request for the specific UID
+        uid_response = requests.get(
+            'http://184.144.75.214/api/api.php',
+            json={'table_id': requested_uid},
+            headers=headers_input
         )
         
         # Parse the JSON response
-        data = response.json()
-        
-        # Debug print
+        data = uid_response.json()
         print("Raw data received:", data)
         
         # Convert to list of individual elements
@@ -31,35 +42,30 @@ def get_data():
         if isinstance(data, list):
             for item in data:
                 # Check if item is a dictionary and has required keys
-                if isinstance(item, dict) and all(key in item for key in ['time', 'loc', 'sensor_1', 'sensor_2']):
+                if isinstance(item, dict) and all(key in item for key in ['time', 'lat', 'lng', 'sensor_1', 'sensor_2']):
+                    # Combine lat and lng into a loc object
+                    loc = f"{item['lat']},{item['lng']}"
                     result.extend([
                         {'time': item['time']},
-                        {'loc': item['loc']},
+                        {'loc': loc},
                         {'sensor_1': item['sensor_1']},
                         {'sensor_2': item['sensor_2']}
                     ])
         elif isinstance(data, dict):
             # Check if data dictionary has required keys
-            if all(key in data for key in ['time', 'loc', 'sensor_1', 'sensor_2']):
+            if all(key in data for key in ['time', 'lat', 'lng', 'sensor_1', 'sensor_2']):
+                # Combine lat and lng into a loc object
+                loc = f"{data['lat']},{data['lng']}"
                 result.extend([
                     {'time': data['time']},
-                    {'loc': data['loc']},
+                    {'loc': loc},
                     {'sensor_1': data['sensor_1']},
                     {'sensor_2': data['sensor_2']}
                 ])
             
         print("Processed data:", result)
-
-
-        heatmap_data = [
-            {"lat": 44.2253, "lng": -76.4951, "value": 85},
-            {"lat": 44.2258, "lng": -76.4942, "value": 75},
-            {"lat": 44.2248, "lng": -76.4960, "value": 90},
-            {"lat": 44.2263, "lng": -76.4955, "value": 65},
-
-        ]
         
-        return jsonify(heatmap_data)
+        return jsonify(result)
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         return jsonify({'error': str(e)}), 500

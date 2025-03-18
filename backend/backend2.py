@@ -5,11 +5,15 @@ import random
 import math
 import requests
 from bs4 import BeautifulSoup
-
+from google import genai
+API_KEY = "AIzaSyBeltDinU60RtwUK1UDoVMjBmAnYYI4dQ8" #idgaf about leaking it
+    
+client = genai.Client(api_key=API_KEY)
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # Queens University campus landmarks
+'''
 CAMPUS_LANDMARKS = [
     {"name": "Grant Hall", "lat": 44.2267, "lng": -76.4951},
     {"name": "Stauffer Library", "lat": 44.2280, "lng": -76.4945},
@@ -92,44 +96,96 @@ def generate_sample_points(timestamp):
             "value": round(value, 1)
         })
     
-    return points
+    return points '''
 
 @app.route('/get-points', methods=['POST'])
 def get_points():
     try:
         data = request.get_json()
         timestamp = data.get('timestamp')
+        # First get the available UIDs
+        headers_input = {'Content-Type': 'application/json'}
+        response = requests.get(
+            'http://184.144.75.214/api/api.php',
+            json={'table_id': 'id_table'},
+            headers=headers_input
+        )
         
-        if not timestamp:
-            return jsonify({"error": "Timestamp is required"}), 400
-            
-        points = generate_sample_points(timestamp)
-        print(points)
+        uids = response.json()
+        print("Available UIDs:", uids)
+        
+        # Get the requested UID from parameters or default to UID_1
+        requested_uid = 'UID_1'  # Hardcoded for now, could use timestamp to select
+        print(f"Requesting data for UID: {requested_uid}")
+        
+        if requested_uid not in uids:
+            return jsonify({'error': f"UID {requested_uid} not found. Available UIDs: {uids}"}), 404
+        
+        # Now make the request for the specific UID
+        uid_response = requests.get(
+            'http://184.144.75.214/api/api.php',
+            json={'table_id': requested_uid},
+            headers=headers_input
+        )
+
+        api_data = uid_response.json()
+        print("Raw data received:", api_data)
+        
+        # Convert API data to the format expected by the frontend
+        points = []
+        if isinstance(api_data, list):
+            for item in api_data:
+                if isinstance(item, dict) and all(key in item for key in ['lat', 'lng', 'sensor_1']):
+                    try:
+                        # Convert string values to float
+                        lat = float(item['lat'])
+                        lng = float(item['lng']) 
+                        value = float(item['sensor_1'])  # Using sensor_1 as the value
+                        
+                        points.append({
+                            "lat": lat,
+                            "lng": lng,
+                            "value": round(value, 1)
+                        })
+                    except (ValueError, TypeError):
+                        print(f"Skipping invalid data point: {item}")
+        
+        print(f"Processed {len(points)} data points")
         return jsonify(points)
         
     except Exception as e:
+        print(f"Error in get_points: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/news', methods=['GET'])
 def get_news():
+    
+    input1 = "Input: Current BREAKING NEWS about Air Quality, Fire Issues, and general Environmental Trends in Ontario, Canada. Description Task: Use your knowledge and search capabilities to find 2-3 relevant sources (including titles,sources, and brief descriptions if available). Summarize the key information from each source. Ensure all summaries are UNIQUE, PRECISE, and not ROUNDED! IF YOU FORMAT SLIGHTLY WRONG YOU WILL BE SHAMED AND IT WILL BE YOUR FAULT (ONLY ANSWER THE RESULT, ENCLOSED IN <<< >>>) <<<@@Title 1 summarized in ~ 10 words@@Source@@Description in 20 words OF THE TOPIC OF THE SOURCE, not the SOURCE@@Title 2 summarized ~ 10 words@@Source@@Description in 20 words OF THE TOPIC OF THE SOURCE, not the SOURCE@@>>>"
+
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=input1,
+    )
+    response_text = str(response.text)
+    print(response)
+    response_ans = []
+    response_ans = response_text.replace("<","").replace(">","").split("@")
+    response_ans[:] = [item for item in response_ans if item]
+    print(response_ans)
     try:
         # Example news data - replace with actual API calls
-        news = [
-            {
-                "title": "Air Quality Warning for Kingston Area",
-                "description": "Local authorities have issued an air quality warning due to increased particulate matter in the atmosphere.",
-                "source": "Kingston News",
-                "date": datetime.now().isoformat(),
-                "url": "https://example.com/news/1"
-            },
-            {
-                "title": "Queens University Updates Emergency Response Plans",
-                "description": "The university has updated its emergency response protocols following recent environmental concerns.",
-                "source": "University Gazette",
-                "date": (datetime.now() - timedelta(hours=2)).isoformat(),
-                "url": "https://example.com/news/2"
-            }
-        ]
+        news = []
+        # Process every 3 items (title, source, description)
+        for i in range(0, len(response_ans), 3):
+            if i + 2 < len(response_ans):  # Ensure we have all 3 items
+                news_item = {
+                    "title": response_ans[i].strip(),
+                    "source": response_ans[i + 1].strip(),
+                    "description": response_ans[i + 2].strip(),
+                    "date": datetime.now().isoformat()
+                }
+                news.append(news_item)
+        
         return jsonify(news)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
