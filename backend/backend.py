@@ -2,6 +2,9 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests
 
+API_KEY = "AIzaSyBeltDinU60RtwUK1UDoVMjBmAnYYI4dQ8" #idgaf about leaking it
+    
+client = genai.Client(api_key=API_KEY)
 app = Flask(__name__)
 CORS(app)
 
