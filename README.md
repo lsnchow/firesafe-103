@@ -1,5 +1,5 @@
 # FireSafe - Real-Time High Resolution Environmental Data Monitoring System
-© Lucas Chow APSC 103
+
 
 
 # Clone Repo
